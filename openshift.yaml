@@ -1,10 +1,20 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: felino-app
+
+---
+apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: felino-web
+  namespace: felino-app
 spec:
   source:
-    type: Binary
+    type: Git
+    git:
+      uri: "https://github.com/JuanMoranULEAM/gatos-pagejuan.git"
+      ref: main
   strategy:
     type: Docker
     dockerStrategy:
@@ -12,19 +22,32 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: felino-web:latest
+      name: "felino-web:latest"
+  triggers:
+  - type: GitHub
+    github:
+      secret: felino-secret
+  - type: ConfigChange
+
 ---
-apiVersion: v1
+apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: felino-web
+  namespace: felino-app
+spec:
+  lookupPolicy:
+    local: false
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: felino-web
+  namespace: felino-app
+  labels:
+    app: felino-web
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: felino-web
@@ -36,8 +59,11 @@ spec:
       containers:
       - name: felino-web
         image: image-registry.openshift-image-registry.svc:5000/felino-app/felino-web:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
+          name: http
+          protocol: TCP
         resources:
           limits:
             memory: "256Mi"
@@ -45,11 +71,28 @@ spec:
           requests:
             memory: "128Mi"
             cpu: "125m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: felino-web
+  namespace: felino-app
+  labels:
+    app: felino-web
 spec:
   selector:
     app: felino-web
@@ -57,15 +100,23 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 8080
+    name: http
   type: ClusterIP
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: felino-web
+  namespace: felino-app
+  labels:
+    app: felino-web
 spec:
   to:
     kind: Service
     name: felino-web
+    weight: 100
   port:
     targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
