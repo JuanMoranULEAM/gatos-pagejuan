@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  name: felino-web
+spec:
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: felino-web:latest
+---
+apiVersion: v1
+kind: ImageStream
+metadata:
+  name: felino-web
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: felino-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: felino-web
+  template:
+    metadata:
+      labels:
+        app: felino-web
+    spec:
+      containers:
+      - name: felino-web
+        image: image-registry.openshift-image-registry.svc:5000/felino-app/felino-web:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+          requests:
+            memory: "128Mi"
+            cpu: "125m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: felino-web
+spec:
+  selector:
+    app: felino-web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: felino-web
+spec:
+  to:
+    kind: Service
+    name: felino-web
+  port:
+    targetPort: 8080
